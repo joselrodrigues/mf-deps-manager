@@ -1,6 +1,6 @@
 {
   "name": "@joselrodrigues/mf-deps-manager",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "type": "module",
   "exports": {
     ".": {
