@@ -67,11 +67,12 @@ export class DependencyManager {
     current: string,
     target: string,
   ): { isDowngrade: boolean; isRangeSatisfied?: boolean } {
-    // Handle version ranges
+    // Handle version ranges for peerDependencies
     if (
       current.startsWith('>=') ||
-      current.startsWith('^') ||
-      current.startsWith('~')
+      current.startsWith('<=') ||
+      current.startsWith('>') ||
+      current.startsWith('<')
     ) {
       const isRangeSatisfied = semver.satisfies(target, current);
       return {
@@ -83,6 +84,13 @@ export class DependencyManager {
     // Clean versions for comparison
     const cleanCurrent = current.replace(/[\^~>=<]/g, '');
     const cleanTarget = target.replace(/[\^~>=<]/g, '');
+
+    // For ^ and ~ prefixes, we still need to check for downgrades
+    if (current.startsWith('^') || current.startsWith('~')) {
+      return {
+        isDowngrade: semver.gt(cleanCurrent, cleanTarget),
+      };
+    }
 
     return {
       isDowngrade: semver.gt(cleanCurrent, cleanTarget),
