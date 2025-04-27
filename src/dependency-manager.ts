@@ -1,6 +1,8 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import chalk from 'chalk';
+import semver from 'semver';
+import readline from 'readline';
 
 /**
  * Represents the type of dependency in package.json
@@ -27,6 +29,8 @@ interface UpdateInfo {
   current: string;
   new: string;
   category: string;
+  isDowngrade?: boolean;
+  isRangeSatisfied?: boolean;
 }
 
 /**
@@ -38,6 +42,52 @@ export class DependencyManager {
    * @param catalogPath - Path to the catalog directory containing dependency definitions
    */
   constructor(private catalogPath: string) {}
+
+  /**
+   * Prompts user for confirmation
+   */
+  private async promptUser(question: string): Promise<boolean> {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    return new Promise((resolve) => {
+      rl.question(`${question} (y/N): `, (answer) => {
+        rl.close();
+        resolve(answer.toLowerCase() === 'y');
+      });
+    });
+  }
+
+  /**
+   * Compares versions and determines if it's a downgrade
+   */
+  private compareVersions(
+    current: string,
+    target: string,
+  ): { isDowngrade: boolean; isRangeSatisfied?: boolean } {
+    // Handle version ranges
+    if (
+      current.startsWith('>=') ||
+      current.startsWith('^') ||
+      current.startsWith('~')
+    ) {
+      const isRangeSatisfied = semver.satisfies(target, current);
+      return {
+        isDowngrade: false,
+        isRangeSatisfied,
+      };
+    }
+
+    // Clean versions for comparison
+    const cleanCurrent = current.replace(/[\^~>=<]/g, '');
+    const cleanTarget = target.replace(/[\^~>=<]/g, '');
+
+    return {
+      isDowngrade: semver.gt(cleanCurrent, cleanTarget),
+    };
+  }
 
   /**
    * Loads a catalog file for a specific category
@@ -197,10 +247,17 @@ export class DependencyManager {
         )) {
           for (const [category, catalog] of Object.entries(catalogs)) {
             if (catalog[pkg] && catalog[pkg] !== currentVersion) {
+              const comparison = this.compareVersions(
+                currentVersion,
+                catalog[pkg],
+              );
+
               updates[depType][pkg] = {
                 current: currentVersion,
                 new: catalog[pkg],
                 category,
+                isDowngrade: comparison.isDowngrade,
+                isRangeSatisfied: comparison.isRangeSatisfied,
               };
               hasUpdates = true;
             }
@@ -216,14 +273,29 @@ export class DependencyManager {
 
     console.log(chalk.bold('\n📦 Updates available:\n'));
 
-    // Display updates
+    // Display updates with additional information
     for (const depType of dependencyTypes) {
       if (Object.keys(updates[depType]).length > 0) {
         console.log(chalk.bold(`${depType}:`));
         for (const [pkg, info] of Object.entries(updates[depType])) {
-          console.log(
-            `  ${pkg}: ${info.current} → ${info.new} (${info.category})`,
-          );
+          let updateString = `  ${pkg}: ${info.current} → ${info.new} (${info.category})`;
+
+          if (info.isDowngrade) {
+            updateString += chalk.yellow(' [DOWNGRADE]');
+          }
+
+          if (
+            depType === 'peerDependencies' &&
+            info.isRangeSatisfied !== undefined
+          ) {
+            if (info.isRangeSatisfied) {
+              updateString += chalk.green(' [Already satisfied]');
+            } else {
+              updateString += chalk.red(' [Not satisfied]');
+            }
+          }
+
+          console.log(updateString);
         }
         console.log('');
       }
@@ -234,10 +306,33 @@ export class DependencyManager {
       return;
     }
 
-    // Apply updates
+    // Apply updates with confirmation for downgrades
     for (const [depType, deps] of Object.entries(updates)) {
       for (const [pkg, info] of Object.entries(deps)) {
-        packageJson[depType as DependencyType]![pkg] = info.new;
+        let shouldUpdate = true;
+
+        // Ask for confirmation on downgrades
+        if (info.isDowngrade) {
+          shouldUpdate = await this.promptUser(
+            chalk.yellow(
+              `${pkg} will be downgraded from ${info.current} to ${info.new}. Continue?`,
+            ),
+          );
+        }
+
+        // For peerDependencies with ranges, only update if the range is not satisfied
+        if (depType === 'peerDependencies' && info.isRangeSatisfied) {
+          console.log(
+            chalk.blue(
+              `Skipping ${pkg} - current range ${info.current} already satisfies ${info.new}`,
+            ),
+          );
+          shouldUpdate = false;
+        }
+
+        if (shouldUpdate) {
+          packageJson[depType as DependencyType]![pkg] = info.new;
+        }
       }
     }
 
