@@ -1,6 +1,6 @@
 {
   "name": "@joselrodrigues/mf-deps-manager",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "type": "module",
   "exports": {
     ".": {
@@ -10,9 +10,6 @@
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/joselrodrigues"
-  },
-  "bin": {
-    "mf-deps": "./bin/cli.js"
   },
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",

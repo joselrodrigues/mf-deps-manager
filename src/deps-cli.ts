@@ -42,7 +42,7 @@ export class DepsCLI {
    */
   private setupCommands(): void {
     this.program
-      .name('mf-deps')
+      .name('@joselrodrigues/mf-deps-manager')
       .description('CLI for managing microfrontend dependencies')
       .version('1.0.0');
 
