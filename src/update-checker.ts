@@ -14,6 +14,24 @@ export class UpdateChecker {
   constructor(private catalogPath: string) {}
 
   /**
+   * Preserves version prefixes like ^, ~, >=, etc.
+   */
+  private preserveVersionPrefix(
+    currentVersion: string,
+    newVersion: string,
+  ): string {
+    // Extraer prefijo de la versión actual
+    const prefixMatch = currentVersion.match(/^([\^~>=<]+)/);
+    if (prefixMatch) {
+      const prefix = prefixMatch[1];
+      // Asegurarse de que la nueva versión no tenga prefijo antes de agregar el nuestro
+      const cleanNewVersion = newVersion.replace(/^[\^~>=<]+/, '');
+      return `${prefix}${cleanNewVersion}`;
+    }
+    return newVersion;
+  }
+
+  /**
    * Checks for available updates across all categories
    * @param categories - List of categories to check
    */
@@ -103,11 +121,18 @@ export class UpdateChecker {
             stdio: ['pipe', 'pipe', 'ignore'],
           }).trim();
 
-          updatedDeps[pkg] = latestVersion;
+          // Preservar el prefijo de versión
+          const versionWithPrefix = this.preserveVersionPrefix(
+            currentVersion as string,
+            latestVersion,
+          );
+          updatedDeps[pkg] = versionWithPrefix;
 
-          if (latestVersion !== currentVersion) {
+          if (versionWithPrefix !== currentVersion) {
             console.log(
-              chalk.green(`✅ ${pkg}: ${currentVersion} → ${latestVersion}`),
+              chalk.green(
+                `✅ ${pkg}: ${currentVersion} → ${versionWithPrefix}`,
+              ),
             );
             updateCount++;
           } else {
